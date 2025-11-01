@@ -179,18 +179,6 @@ A: Aborting sets its `Max` and `Need` to 0. You can also reload the page or impl
 
 ---
 
-## ✅ Suggestions for extra improvements (if you want to extend)
-- Add CSV import/export for matrices.
-- Store scenarios in `localStorage` or allow multiple saved scenarios.
-- Add improved recovery strategies:
-  - Abort minimum-cost process
-  - Roll back to previous safe state automatically
-- Implement advanced graph layout (D3.js or force simulation).
-- Add logging and step-through mode to show Banker's algorithm steps one by one.
-- Add a short demo GIF and screenshots inside `assets/` and reference them in README.
-
----
-
 ## 📜 License
 MIT License
 Copyright (c) 2025 Prajithaa Parani
