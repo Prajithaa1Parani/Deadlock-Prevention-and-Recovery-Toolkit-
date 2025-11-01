@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Deadlock Toolkit — Banker's Algorithm & Graphs</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        /* Simple, human-friendly styling */
+        :root {
+            --bg: #f7f9fb;
+            --card: #ffffff;
+            --muted: #6b7280;
+            --accent: #2563eb;
+            --danger: #dc2626;
+            --success: #16a34a;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        }
+        body {
+            margin: 18px;
+            background: linear-gradient(180deg,#f8fafc,#eef2ff);
+            color: #0f172a;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        header {
+            margin-bottom: 14px;
+        }
+        h1 {
+            font-size: 20px;
+            margin: 0 0 6px 0;
+        }
+        p.lead {
+            margin: 0 0 10px 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 1px 6px rgba(2,6,23,0.06);
+            margin-bottom: 12px;
+        }
+        label { font-size: 13px; color: var(--muted); display:block; margin-bottom:6px; }
+        .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+        input[type="number"] { width:90px; padding:6px 8px; border:1px solid #e6eef8; border-radius:6px; }
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button.secondary {
+            background: #64748b;
+        }
+        button.danger { background: var(--danger); }
+        button.small { padding:6px 8px; font-size:13px; }
+        table { width:100%; border-collapse: collapse; margin-top:10px; font-size:13px; }
+        th, td { border: 1px solid #eef2f7; padding:6px; text-align:center; }
+        th { background:#f1f5f9; color:#111827; }
+        .muted { color: var(--muted); font-size:13px; }
+        .status { margin-top:8px; font-weight:600; }
+        .status.safe { color: var(--success); }
+        .status.unsafe { color: var(--danger); }
+        .controls { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+        #svgArea { background: linear-gradient(180deg,#ffffff,#f8fafc); border-radius:8px; padding:8px; }
+        .note { font-size:12px; color:var(--muted); margin-top:6px; }
+        .small-input { width:60px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Deadlock Toolkit — Banker's Algorithm & Allocation Graph</h1>
+            <p class="lead">A simple simulator to detect, prevent and recover from deadlocks. Enter counts, fill matrices, run checks, and simulate requests. Graph updates in real-time.</p>
+        </header>
+
+        <div class="card" id="setupCard">
+            <div class="row">
+                <div>
+                    <label>Processes</label>
+                    <input type="number" id="procCount" min="1" value="3" />
+                </div>
+                <div>
+                    <label>Resource types</label>
+                    <input type="number" id="resCount" min="1" value="3" />
+                </div>
+                <div style="align-self:flex-end;">
+                    <button id="makeMatrices">Create Matrices</button>
+                    <button id="fillExample" class="secondary small">Example</button>
+                    <button id="resetBtn" class="secondary small">Reset</button>
+                </div>
+            </div>
+            <p class="note">Tip: use small numbers to try scenarios quickly. Example sets up a known scenario.</p>
+        </div>
+
+        <div class="card" id="matricesCard" style="display:none;">
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <div style="flex:1;">
+                    <strong>Available</strong>
+                    <div id="availableInputs" style="margin-top:8px;"></div>
+                </div>
+                <div style="flex:2;">
+                    <strong>Max (Maximum demand per process)</strong>
+                    <div id="maxTable"></div>
+                </div>
+                <div style="flex:2;">
+                    <strong>Allocation (currently held)</strong>
+                    <div id="allocTable"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="computeNeedBtn">Compute Need & Check Safety</button>
+                <button id="showGraphBtn" class="secondary">Draw Allocation Graph</button>
+            </div>
+
+            <div id="needArea" style="margin-top:8px;"></div>
+            <div id="safetyResult" class="status"></div>
+        </div>
+
+        <div class="card" id="requestCard" style="display:none;">
+            <strong>Simulate a resource request</strong>
+            <div style="display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;">
+                <label>Select process
+                    <select id="procSelect"></select>
+                </label>
+                <div id="reqInputs"></div>
+                <button id="makeRequest">Make Request</button>
+                <button id="forceRecover" class="danger small">Recovery: Abort Process</button>
+            </div>
+            <div id="requestResult" class="muted"></div>
+        </div>
+
+        <div class="card" id="graphCard" style="display:none;">
+            <strong>Resource Allocation Graph</strong>
+            <div id="svgArea">
+                <svg id="allocSVG" width="100%" height="300" viewBox="0 0 900 300" preserveAspectRatio="xMidYMid meet"></svg>
+            </div>
+            <p class="note">Blue edges = allocation (resource → process). Orange edges = request (process → resource).</p>
+        </div>
+
+        <div class="card">
+            <strong>Short explanation</strong>
+            <p class="muted">This page implements the Banker's safety algorithm to check whether current allocations are safe. When you submit a resource request, the simulator will tentatively allocate and test safety — if unsafe, it denies the request (prevention). Use the recovery button to abort a selected process and free its resources to recover from a deadlock.</p>
+        </div>
+    </div>
+
+    <script>
+        // Human-friendly, commented JS implementing core logic
+        const makeBtn = document.getElementById('makeMatrices');
+        const procCountInput = document.getElementById('procCount');
+        const resCountInput = document.getElementById('resCount');
+        const matricesCard = document.getElementById('matricesCard');
+        const availableInputs = document.getElementById('availableInputs');
+        const maxTable = document.getElementById('maxTable');
+        const allocTable = document.getElementById('allocTable');
+        const needArea = document.getElementById('needArea');
+        const safetyResult = document.getElementById('safetyResult');
+        const computeNeedBtn = document.getElementById('computeNeedBtn');
+        const requestCard = document.getElementById('requestCard');
+        const procSelect = document.getElementById('procSelect');
+        const reqInputs = document.getElementById('reqInputs');
+        const makeRequestBtn = document.getElementById('makeRequest');
+        const requestResult = document.getElementById('requestResult');
+        const graphCard = document.getElementById('graphCard');
+        const allocSVG = document.getElementById('allocSVG');
+        const showGraphBtn = document.getElementById('showGraphBtn');
+        const fillExampleBtn = document.getElementById('fillExample');
+        const resetBtn = document.getElementById('resetBtn');
+        const forceRecoverBtn = document.getElementById('forceRecover');
+
+        let P = 0, R = 0;
+        let Available = []; // size R
+        let Max = [];       // P x R
+        let Allocation = []; // P x R
+        let Need = [];      // P x R
+
+        function createMatrices() {
+            P = Math.max(1, parseInt(procCountInput.value) || 1);
+            R = Math.max(1, parseInt(resCountInput.value) || 1);
+            Available = new Array(R).fill(0);
+            Max = new Array(P).fill(0).map(()=> new Array(R).fill(0));
+            Allocation = new Array(P).fill(0).map(()=> new Array(R).fill(0));
+            Need = new Array(P).fill(0).map(()=> new Array(R).fill(0));
+            renderInputs();
+            matricesCard.style.display = 'block';
+            requestCard.style.display = 'block';
+            graphCard.style.display = 'block';
+            safetyResult.textContent = '';
+            needArea.innerHTML = '';
+            requestResult.textContent = '';
+            drawGraph();
+        }
+
+        function renderInputs() {
+            // Available inputs
+            availableInputs.innerHTML = '';
+            for (let j=0;j<R;j++){
+                const inp = document.createElement('input');
+                inp.type = 'number';
+                inp.min = 0;
+                inp.value = Available[j] || 0;
+                inp.dataset.idx = j;
+                inp.addEventListener('change', ()=> { Available[inp.dataset.idx] = parseInt(inp.value)||0; drawGraph(); });
+                availableInputs.appendChild(inp);
+            }
+            // Max table
+            maxTable.innerHTML = '';
+            const tblMax = document.createElement('table');
+            const th = document.createElement('tr');
+            th.innerHTML = '<th>Proc\\Res</th>' + Array.from({length:R},(_,j)=>`<th>R${j}</th>`).join('');
+            tblMax.appendChild(th);
+            for (let i=0;i<P;i++){
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<th>P${i}</th>` + Array.from({length:R},(_,j)=>`<td><input class="small-input" type="number" min="0" value="${Max[i][j]||0}" data-i="${i}" data-j="${j}"></td>`).join('');
+                tblMax.appendChild(tr);
+            }
+            maxTable.appendChild(tblMax);
+
+            // Allocation table
+            allocTable.innerHTML = '';
+            const tblA = document.createElement('table');
+            const th2 = document.createElement('tr');
+            th2.innerHTML = '<th>Proc\\Res</th>' + Array.from({length:R},(_,j)=>`<th>R${j}</th>`).join('');
+            tblA.appendChild(th2);
+            for (let i=0;i<P;i++){
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<th>P${i}</th>` + Array.from({length:R},(_,j)=>`<td><input class="small-input" type="number" min="0" value="${Allocation[i][j]||0}" data-ai="${i}" data-aj="${j}"></td>`).join('');
+                tblA.appendChild(tr);
+            }
+            allocTable.appendChild(tblA);
+
+            // wire up inputs
+            Array.from(maxTable.querySelectorAll('input')).forEach(el=>{
+                el.addEventListener('change', ()=>{
+                    const i = parseInt(el.dataset.i), j = parseInt(el.dataset.j);
+                    Max[i][j] = Math.max(0, parseInt(el.value)||0);
+                });
+            });
+            Array.from(allocTable.querySelectorAll('input')).forEach(el=>{
+                el.addEventListener('change', ()=>{
+                    const i = parseInt(el.dataset.ai), j = parseInt(el.dataset.aj);
+                    Allocation[i][j] = Math.max(0, parseInt(el.value)||0);
+                    drawGraph();
+                });
+            });
+
+            // populate process select and request inputs
+            procSelect.innerHTML = '';
+            for (let i=0;i<P;i++){
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = 'P' + i;
+                procSelect.appendChild(opt);
+            }
+            renderRequestInputs();
+        }
+
+        function renderRequestInputs(){
+            reqInputs.innerHTML = '';
+            for (let j=0;j<R;j++){
+                const inp = document.createElement('input');
+                inp.type = 'number';
+                inp.min = 0;
+                inp.value = 0;
+                inp.className = 'small-input';
+                inp.dataset.j = j;
+                reqInputs.appendChild(inp);
+            }
+        }
+
+        function computeNeed() {
+            Need = new Array(P).fill(0).map(()=> new Array(R).fill(0));
+            let valid = true;
+            for (let i=0;i<P;i++){
+                for (let j=0;j<R;j++){
+                    // ensure allocation <= max
+                    if (Allocation[i][j] > Max[i][j]) {
+                        valid = false;
+                        Allocation[i][j] = Max[i][j];
+                    }
+                    Need[i][j] = Math.max(0, Max[i][j] - Allocation[i][j]);
+                }
+            }
+            // show need table
+            let html = '<strong>Need matrix</strong>';
+            html += '<table><tr><th>Proc\\Res</th>' + Array.from({length:R},(_,j)=>`<th>R${j}</th>`).join('') + '</tr>';
+            for (let i=0;i<P;i++){
+                html += '<tr><th>P'+i+'</th>' + Need[i].map(v=>`<td>${v}</td>`).join('') + '</tr>';
+            }
+            html += '</table>';
+            needArea.innerHTML = html;
+            if (!valid) {
+                safetyResult.textContent = 'Some allocations were larger than Max; they were adjusted.';
+                safetyResult.className = 'status unsafe';
+            } else safetyResult.textContent='';
+            drawGraph();
+            return Need;
+        }
+
+        // Banker's algorithm safety check — returns {safe:boolean, seq: array|null}
+        function safetyCheck() {
+            computeNeed();
+            // Work is copy of Available
+            const work = Available.slice();
+            const finish = new Array(P).fill(false);
+            const seq = [];
+            let progress = true;
+            while (progress) {
+                progress = false;
+                for (let i=0;i<P;i++){
+                    if (!finish[i]) {
+                        let can = true;
+                        for (let j=0;j<R;j++){
+                            if (Need[i][j] > work[j]) { can = false; break; }
+                        }
+                        if (can){
+                            // "execute" i, release its Allocation
+                            for (let j=0;j<R;j++){
+                                work[j] += Allocation[i][j];
+                            }
+                            finish[i] = true;
+                            seq.push(i);
+                            progress = true;
+                        }
+                    }
+                }
+            }
+            const safe = finish.every(Boolean);
+            return { safe, seq: safe?seq:null };
+        }
+
+        function showSafety() {
+            const res = safetyCheck();
+            if (res.safe) {
+                safetyResult.textContent = 'System is SAFE. Safe sequence: ' + res.seq.map(i=>'P'+i).join(' → ');
+                safetyResult.className = 'status safe';
+            } else {
+                safetyResult.textContent = 'System is NOT safe (potential deadlock).';
+                safetyResult.className = 'status unsafe';
+            }
+            return res;
+        }
+
+        function makeRequest() {
+            requestResult.textContent = '';
+            const pid = parseInt(procSelect.value);
+            const req = [];
+            Array.from(reqInputs.querySelectorAll('input')).forEach(inp=>{
+                req.push(Math.max(0, parseInt(inp.value)||0));
+            });
+            // basic checks: request <= need, and request <= available
+            for (let j=0;j<R;j++){
+                if (req[j] > Need[pid][j]) {
+                    requestResult.textContent = `Request denied: P${pid} requests more than its declared need (R${j}).`;
+                    requestResult.style.color = 'var(--danger)';
+                    return;
+                }
+            }
+
+            // Try to allocate temporarily
+            let enough = true;
+            for (let j=0;j<R;j++) if (req[j] > Available[j]) enough = false;
+
+            if (!enough) {
+                requestResult.textContent = 'Not enough available resources now. Request must wait (or recover).';
+                requestResult.style.color = 'var(--muted)';
+                return;
+            }
+
+            // Tentative allocation
+            for (let j=0;j<R;j++){
+                Available[j] -= req[j];
+                Allocation[pid][j] += req[j];
+                Need[pid][j] -= req[j];
+            }
+            // test safety
+            const safeRes = safetyCheck();
+            if (safeRes.safe) {
+                requestResult.textContent = `Request granted. New state is SAFE. Sequence: ${safeRes.seq.map(i=>'P'+i).join(' → ')}`;
+                requestResult.style.color = 'var(--success)';
+            } else {
+                // rollback
+                for (let j=0;j<R;j++){
+                    Available[j] += req[j];
+                    Allocation[pid][j] -= req[j];
+                    Need[pid][j] += req[j];
+                }
+                requestResult.textContent = `Request denied to PREVENT unsafe state (deadlock).`;
+                requestResult.style.color = 'var(--danger)';
+            }
+            renderAfterChange();
+        }
+
+        function renderAfterChange(){
+            // update table inputs to reflect any changes (e.g., after granting)
+            Array.from(allocTable.querySelectorAll('input')).forEach(el=>{
+                const i = parseInt(el.dataset.ai), j = parseInt(el.dataset.aj);
+                el.value = Allocation[i][j];
+            });
+            Array.from(availableInputs.querySelectorAll('input')).forEach(el=>{
+                const j = parseInt(el.dataset.idx);
+                el.value = Available[j];
+            });
+            computeNeed();
+            drawGraph();
+            showSafety();
+        }
+
+        function drawGraph() {
+            // Draw a simple SVG allocation/request graph
+            const svg = allocSVG;
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+            const w = 900, h = 300, margin = 20;
+            const pY = 60, rY = 220;
+            const pxSpacing = (w - 2*margin) / Math.max(P,1);
+            const rxSpacing = (w - 2*margin) / Math.max(R,1);
+            // draw processes (circles)
+            for (let i=0;i<P;i++){
+                const cx = margin + pxSpacing*(i+0.5);
+                const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+                // circle
+                const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+                circ.setAttribute('cx',cx);
+                circ.setAttribute('cy',pY);
+                circ.setAttribute('r',22);
+                circ.setAttribute('fill','#e0f2fe');
+                circ.setAttribute('stroke','#0369a1');
+                circ.setAttribute('stroke-width','1.5');
+                g.appendChild(circ);
+                // text
+                const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+                txt.setAttribute('x',cx);
+                txt.setAttribute('y',pY+4);
+                txt.setAttribute('fill','#075985');
+                txt.setAttribute('text-anchor','middle');
+                txt.setAttribute('font-size','12');
+                txt.textContent = 'P'+i;
+                g.appendChild(txt);
+                svg.appendChild(g);
+            }
+            // draw resources (rectangles)
+            for (let j=0;j<R;j++){
+                const cx = margin + rxSpacing*(j+0.5);
+                const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+                const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                rect.setAttribute('x',cx-26);
+                rect.setAttribute('y',rY-18);
+                rect.setAttribute('width',52);
+                rect.setAttribute('height',30);
+                rect.setAttribute('rx',6);
+                rect.setAttribute('fill','#fef3c7');
+                rect.setAttribute('stroke','#b45309');
+                rect.setAttribute('stroke-width','1.2');
+                g.appendChild(rect);
+                const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+                txt.setAttribute('x',cx);
+                txt.setAttribute('y',rY+6);
+                txt.setAttribute('text-anchor','middle');
+                txt.setAttribute('font-size','12');
+                txt.setAttribute('fill','#92400e');
+                txt.textContent = 'R'+j + ' (' + (Available[j]||0) + ')';
+                g.appendChild(txt);
+                svg.appendChild(g);
+            }
+            // edges: allocations (resource -> process) in blue; requests (process -> resource) in orange
+            for (let i=0;i<P;i++){
+                const px = margin + pxSpacing*(i+0.5);
+                for (let j=0;j<R;j++){
+                    const rx = margin + rxSpacing*(j+0.5);
+                    const allocated = Allocation[i][j];
+                    const requested = Need[i][j] > 0 && Max[i][j] > 0 && Need[i][j] !== Max[i][j] ? 0 : 0; // placeholder
+                    if (allocated > 0) {
+                        // draw allocation from resource (bottom) to process (top) arrow
+                        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+                        line.setAttribute('x1', rx);
+                        line.setAttribute('y1', rY-18);
+                        line.setAttribute('x2', px);
+                        line.setAttribute('y2', pY+22);
+                        line.setAttribute('stroke','#0ea5e9');
+                        line.setAttribute('stroke-width','2');
+                        line.setAttribute('marker-end','url(#arrowBlue)');
+                        svg.appendChild(line);
+                        // label
+                        const lab = document.createElementNS('http://www.w3.org/2000/svg','text');
+                        lab.setAttribute('x', (rx+px)/2 );
+                        lab.setAttribute('y', (rY + pY)/2 - 6 );
+                        lab.setAttribute('fill','#0369a1');
+                        lab.setAttribute('font-size','11');
+                        lab.setAttribute('text-anchor','middle');
+                        lab.textContent = allocated;
+                        svg.appendChild(lab);
+                    }
+                    // request edge if process still needs this resource
+                    if (Need[i][j] > 0) {
+                        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+                        line.setAttribute('x1', px);
+                        line.setAttribute('y1', pY+22);
+                        line.setAttribute('x2', rx);
+                        line.setAttribute('y2', rY-18);
+                        line.setAttribute('stroke','#fb923c');
+                        line.setAttribute('stroke-width','1.6');
+                        line.setAttribute('marker-end','url(#arrowOrange)');
+                        svg.appendChild(line);
+                    }
+                }
+            }
+            // markers
+            const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+            const markerBlue = document.createElementNS('http://www.w3.org/2000/svg','marker');
+            markerBlue.setAttribute('id','arrowBlue');
+            markerBlue.setAttribute('markerWidth','8');
+            markerBlue.setAttribute('markerHeight','8');
+            markerBlue.setAttribute('refX','6');
+            markerBlue.setAttribute('refY','3');
+            markerBlue.setAttribute('orient','auto');
+            const pathB = document.createElementNS('http://www.w3.org/2000/svg','path');
+            pathB.setAttribute('d','M0,0 L6,3 L0,6 Z');
+            pathB.setAttribute('fill','#0ea5e9');
+            markerBlue.appendChild(pathB);
+            defs.appendChild(markerBlue);
+
+            const markerOrange = document.createElementNS('http://www.w3.org/2000/svg','marker');
+            markerOrange.setAttribute('id','arrowOrange');
+            markerOrange.setAttribute('markerWidth','8');
+            markerOrange.setAttribute('markerHeight','8');
+            markerOrange.setAttribute('refX','6');
+            markerOrange.setAttribute('refY','3');
+            markerOrange.setAttribute('orient','auto');
+            const pathO = document.createElementNS('http://www.w3.org/2000/svg','path');
+            pathO.setAttribute('d','M0,0 L6,3 L0,6 Z');
+            pathO.setAttribute('fill','#fb923c');
+            markerOrange.appendChild(pathO);
+            defs.appendChild(markerOrange);
+
+            svg.appendChild(defs);
+        }
+
+        // Recovery: abort a process and free its resources (very simple recovery)
+        function abortProcess(pid) {
+            for (let j=0;j<R;j++){
+                Available[j] += Allocation[pid][j];
+                Allocation[pid][j] = 0;
+                Need[pid][j] = 0;
+                Max[pid][j] = 0;
+            }
+            requestResult.textContent = `Process P${pid} aborted; its resources were freed.`;
+            requestResult.style.color = 'var(--muted)';
+            renderAfterChange();
+        }
+
+        // Example setup
+        function fillExample() {
+            procCountInput.value = 5;
+            resCountInput.value = 3;
+            createMatrices();
+            // classical example
+            Available = [3,3,2];
+            // Max
+            Max = [
+                [7,5,3],
+                [3,2,2],
+                [9,0,2],
+                [2,2,2],
+                [4,3,3]
+            ];
+            Allocation = [
+                [0,1,0],
+                [2,0,0],
+                [3,0,2],
+                [2,1,1],
+                [0,0,2]
+            ];
+            // recompute Need
+            computeNeed();
+            // update DOM
+            Array.from(availableInputs.querySelectorAll('input')).forEach((el,idx)=>el.value = Available[idx]);
+            Array.from(maxTable.querySelectorAll('input')).forEach(el=>{
+                const i = parseInt(el.dataset.i), j = parseInt(el.dataset.j);
+                el.value = Max[i][j];
+            });
+            Array.from(allocTable.querySelectorAll('input')).forEach(el=>{
+                const i = parseInt(el.dataset.ai), j = parseInt(el.dataset.aj);
+                el.value = Allocation[i][j];
+            });
+            renderAfterChange();
+        }
+
+        // wire up events
+        makeBtn.addEventListener('click', ()=> createMatrices());
+        computeNeedBtn.addEventListener('click', ()=> showSafety());
+        makeRequestBtn.addEventListener('click', ()=> makeRequest());
+        showGraphBtn.addEventListener('click', ()=> drawGraph());
+        fillExampleBtn.addEventListener('click', ()=> fillExample());
+        resetBtn.addEventListener('click', ()=> {
+            location.reload();
+        });
+        forceRecoverBtn.addEventListener('click', ()=>{
+            const pid = parseInt(procSelect.value);
+            if (!confirm(`Abort process P${pid} to free its resources?`)) return;
+            abortProcess(pid);
+        });
+
+        // initial create
+        createMatrices();
+    </script>
+</body>
+</html>
