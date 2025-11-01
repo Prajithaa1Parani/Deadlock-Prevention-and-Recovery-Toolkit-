@@ -43,8 +43,6 @@ deadlock-prevention-and-recovery-toolkit/
     ├── algorithm_explanation.pdf
     └── project_presentation.pptx
 
----
-
 ## 🧩 Files to include
 - `index.html` — the full app (HTML, CSS, JS combined).  
   > Use the HTML you already have (the UI with matrices, Banker's logic, graph drawing & example).  
