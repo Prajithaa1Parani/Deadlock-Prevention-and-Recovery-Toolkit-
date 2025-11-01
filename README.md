@@ -21,23 +21,24 @@ The UI is pure HTML/CSS/JS and is copy-paste runnable as a single `index.html`.
 
 ## 📁 Repository structure (suggested)
 
-📁 deadlock-prevention-and-recovery-toolkit/
-├── index.html                # main project file (HTML + CSS + JS combined)
-├── README.md                 # complete project documentation
-├── LICENSE                   # optional (MIT or your preferred license)
+deadlock-prevention-and-recovery-toolkit/
 │
-├── assets/                   # optional folder for visuals
+├── index.html                # Main project file (HTML + CSS + JS combined)
+├── README.md                 # Complete project documentation
+├── LICENSE                   # Optional (MIT or your preferred license)
+│
+├── assets/                   # Folder for visuals (optional)
 │   ├── demo.gif
 │   ├── screenshot1.png
 │   └── screenshot2.png
 │
-├── js/                       # optional (if separating JS)
-│   └── main.js               # Banker's algorithm & graph logic
+├── js/                       # Folder for scripts (optional)
+│   └── main.js               # Banker's Algorithm & graph logic
 │
-├── css/                      # optional (if separating styles)
+├── css/                      # Folder for styles (optional)
 │   └── style.css             # UI design & styling
 │
-└── docs/                     # optional (for reports & presentation)
+└── docs/                     # Folder for reports & presentations (optional)
     ├── system_design_report.pdf
     ├── algorithm_explanation.pdf
     └── project_presentation.pptx
