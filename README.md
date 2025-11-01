@@ -19,8 +19,9 @@ The UI is pure HTML/CSS/JS and is copy-paste runnable as a single `index.html`.
 
 ---
 
-## 📁 Repository structure (suggested)
+## 📁 Repository Structure
 
+```bash
 deadlock-prevention-and-recovery-toolkit/
 │
 ├── index.html                # Main project file (HTML + CSS + JS combined)
@@ -42,6 +43,8 @@ deadlock-prevention-and-recovery-toolkit/
     ├── system_design_report.pdf
     ├── algorithm_explanation.pdf
     └── project_presentation.pptx
+```
+
 
 ## 🧩 Files to include
 - `index.html` — the full app (HTML, CSS, JS combined).  
